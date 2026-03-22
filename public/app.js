@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
-   RalliVell — app.js   (Rave-like watch party)
-   Socket.IO client · video embedding · room sync · chat
+   RalliVell — app.js
+   Host controls everything (play/pause/seek) for YouTube & MP4.
+   Guests are read-only — they follow the host.
 ═══════════════════════════════════════════════════════════════ */
 
 'use strict';
@@ -14,15 +15,29 @@ let myRoomId = null;
 let isHost   = false;
 let currentUrl = '';
 let videoType  = null;   // 'youtube' | 'mp4' | null
-let videoEl    = null;   // <video> element (mp4 only)
+let videoEl    = null;   // <video> element for MP4
+let ytPlayer   = null;   // YouTube IFrame Player instance
 let unreadChat = 0;
-let chatOpen   = false;
+
+// ─── YouTube IFrame API ──────────────────────────────────────────
+let ytApiReady     = false;
+let ytPendingCreate = null;  // queued create() call until API loads
+
+(function loadYTApi() {
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(tag);
+})();
+
+window.onYouTubeIframeAPIReady = function () {
+  ytApiReady = true;
+  if (ytPendingCreate) { ytPendingCreate(); ytPendingCreate = null; }
+};
 
 // ─── DOM refs ─────────────────────────────────────────────────────
 const pageHome = document.getElementById('page-home');
 const pageRoom = document.getElementById('page-room');
 
-// Home
 const homeVideoUrl    = document.getElementById('home-video-url');
 const btnWatchNow     = document.getElementById('btn-watch-now');
 const soloPlayerWrap  = document.getElementById('solo-player-wrap');
@@ -35,7 +50,6 @@ const btnOpenJoin     = document.getElementById('btn-open-join');
 const btnHeroCreate   = document.getElementById('btn-hero-create');
 const btnHeroJoin     = document.getElementById('btn-hero-join');
 
-// Modals
 const modalCreate      = document.getElementById('modal-create');
 const createName       = document.getElementById('create-name');
 const createVideoUrl   = document.getElementById('create-video-url');
@@ -50,7 +64,6 @@ const btnJoinConfirm = document.getElementById('btn-join-confirm');
 const btnJoinCancel  = document.getElementById('btn-join-cancel');
 const joinError      = document.getElementById('join-error');
 
-// Room
 const displayRoomCode  = document.getElementById('display-room-code');
 const btnCopyCode      = document.getElementById('btn-copy-code');
 const btnCopyInvite    = document.getElementById('btn-copy-invite');
@@ -81,31 +94,19 @@ const chatBadge        = document.getElementById('chat-badge');
 (function initParticles() {
   const container = document.getElementById('particles');
   const colors = ['#f0569a', '#9b5de5', '#c77dff', '#f5a3d0', '#7c3aed'];
-
   function spawn() {
     const el = document.createElement('div');
     el.className = 'particle';
     const size = 3 + Math.random() * 6;
-    const left = Math.random() * 100;
     const dur  = 12 + Math.random() * 16;
     const delay = Math.random() * 8;
-    const color = colors[Math.floor(Math.random() * colors.length)];
-    el.style.cssText = `
-      width:${size}px; height:${size}px;
-      left:${left}%;
-      background:${color};
-      animation-duration:${dur}s;
-      animation-delay:${delay}s;
-      opacity:0;
-      filter: blur(${Math.random() > .5 ? 1 : 0}px);
-    `;
+    el.style.cssText = `width:${size}px;height:${size}px;left:${Math.random()*100}%;
+      background:${colors[Math.floor(Math.random()*colors.length)]};
+      animation-duration:${dur}s;animation-delay:${delay}s;opacity:0;`;
     container.appendChild(el);
     setTimeout(() => el.remove(), (dur + delay) * 1000);
   }
-
-  // Spawn 30 initial particles
   for (let i = 0; i < 30; i++) spawn();
-  // Keep spawning
   setInterval(spawn, 700);
 })();
 
@@ -132,7 +133,6 @@ function showToast(msg, duration = 2800) {
 
 function openModal(modal) {
   modal.classList.remove('hidden');
-  // Animate in
   const m = modal.querySelector('.modal');
   if (m) { m.style.animation = 'none'; requestAnimationFrame(() => { m.style.animation = ''; }); }
 }
@@ -167,36 +167,33 @@ function avatarColor(name) {
 
 function escHtml(str) {
   return String(str)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ═══════════════════════════════════════════════════════════════
-//   URL PARAMS — invite link support
+//   INVITE LINK (URL param auto-fill)
 // ═══════════════════════════════════════════════════════════════
 
 function getInviteCodeFromURL() {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('room') || params.get('code') || null;
+  const p = new URLSearchParams(window.location.search);
+  return p.get('room') || p.get('code') || null;
 }
 
 (function checkInviteOnLoad() {
   const code = getInviteCodeFromURL();
-  if (code) {
-    // Clean URL so user doesn't see ugly params
-    window.history.replaceState({}, '', window.location.pathname);
-    // Open join modal with pre-filled code
-    joinError.classList.add('hidden');
-    joinName.value = '';
-    joinCode.value = code.toUpperCase();
-    openModal(modalJoin);
-    joinName.focus();
-    showToast(`🔗 Код комнаты ${code.toUpperCase()} — введи своё имя!`);
-  }
+  if (!code) return;
+  window.history.replaceState({}, '', window.location.pathname);
+  joinError.classList.add('hidden');
+  joinName.value = '';
+  joinCode.value  = code.toUpperCase();
+  openModal(modalJoin);
+  joinName.focus();
+  showToast(`🔗 Код комнаты ${code.toUpperCase()} — введи своё имя!`);
 })();
 
 // ═══════════════════════════════════════════════════════════════
-//   VIDEO DETECTION & EMBEDDING
+//   VIDEO DETECTION
 // ═══════════════════════════════════════════════════════════════
 
 function getYouTubeId(url) {
@@ -219,9 +216,25 @@ function detectVideoType(url) {
   return null;
 }
 
+// ═══════════════════════════════════════════════════════════════
+//   PLAYER LIFECYCLE
+// ═══════════════════════════════════════════════════════════════
+
+function destroyCurrentPlayer() {
+  // Clear YT progress interval
+  if (window._ytInterval) { clearInterval(window._ytInterval); window._ytInterval = null; }
+  // Destroy YT player
+  if (ytPlayer) { try { ytPlayer.destroy(); } catch(e) {} ytPlayer = null; }
+  // Clear MP4
+  videoEl  = null;
+  videoType = null;
+  roomControls.classList.add('hidden');
+}
+
+// ── Build embed (entrance point) ──────────────────────────────────
 function buildEmbed(url, container, { autoplay = false, isRoom = false } = {}) {
+  destroyCurrentPlayer();
   container.innerHTML = '';
-  videoEl   = null;
   videoType = detectVideoType(url);
 
   if (!videoType) {
@@ -234,81 +247,205 @@ function buildEmbed(url, container, { autoplay = false, isRoom = false } = {}) {
   }
 
   if (videoType === 'youtube') {
-    const ytId = getYouTubeId(url);
-    const iframe = document.createElement('iframe');
-    iframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=${autoplay ? 1 : 0}&rel=0&modestbranding=1&enablejsapi=1`;
-    iframe.allow = 'autoplay; encrypted-media; fullscreen';
-    iframe.allowFullscreen = true;
-    container.appendChild(iframe);
-    if (isRoom) roomControls.classList.add('hidden');
-  } else {
-    const video = document.createElement('video');
-    video.src      = url;
-    video.controls = !isRoom;
-    video.autoplay = autoplay;
-    video.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
-    container.appendChild(video);
-    videoEl = video;
-
     if (isRoom) {
-      if (isHost) {
-        roomControls.classList.remove('hidden');
+      buildYTRoom(getYouTubeId(url), container, autoplay);
+    } else {
+      // Solo preview — simple iframe, no sync needed
+      const iframe = document.createElement('iframe');
+      iframe.src = `https://www.youtube.com/embed/${getYouTubeId(url)}?autoplay=${autoplay?1:0}&rel=0&modestbranding=1`;
+      iframe.allow = 'autoplay; encrypted-media; fullscreen';
+      iframe.allowFullscreen = true;
+      container.appendChild(iframe);
+    }
+  } else {
+    buildMP4(url, container, { autoplay, isRoom });
+  }
+}
+
+// ── YouTube room embed (IFrame API) ───────────────────────────────
+function buildYTRoom(ytId, container, autoplay) {
+  const wrapper = document.createElement('div');
+  wrapper.id = 'yt-player-el';
+  wrapper.style.cssText = 'width:100%;height:100%;';
+  container.appendChild(wrapper);
+
+  function create() {
+    ytPlayer = new YT.Player('yt-player-el', {
+      videoId: ytId,
+      height: '100%',
+      width: '100%',
+      playerVars: {
+        autoplay:       autoplay ? 1 : 0,
+        rel:            0,
+        modestbranding: 1,
+        // guests: hide controls so they can't manually interact
+        controls:       isHost ? 1 : 0,
+        disablekb:      isHost ? 0 : 1,
+        fs:             1,
+      },
+      events: {
+        onReady: () => {
+          if (isHost) {
+            roomControls.classList.remove('hidden');
+            startYTProgressTracker();
+          } else {
+            // Ask host for current state
+            setTimeout(() => socket.emit('request-sync', { roomId: myRoomId }), 800);
+          }
+        },
+        onStateChange: (e) => {
+          // Only host events get broadcast
+          if (!isHost) return;
+          if (e.data === YT.PlayerState.PLAYING) {
+            socket.emit('video-play', { roomId: myRoomId, currentTime: ytPlayer.getCurrentTime() });
+            ctrlPlay.textContent = '⏸';
+          } else if (e.data === YT.PlayerState.PAUSED) {
+            socket.emit('video-pause', { roomId: myRoomId, currentTime: ytPlayer.getCurrentTime() });
+            ctrlPlay.textContent = '▶';
+          }
+        }
       }
-      setupVideoEvents(video);
+    });
+  }
+
+  if (ytApiReady) create();
+  else ytPendingCreate = create;
+}
+
+// Track YT progress for host custom controls
+function startYTProgressTracker() {
+  if (window._ytInterval) clearInterval(window._ytInterval);
+  window._ytInterval = setInterval(() => {
+    if (!ytPlayer || typeof ytPlayer.getCurrentTime !== 'function') return;
+    const cur = ytPlayer.getCurrentTime();
+    const dur = ytPlayer.getDuration() || 0;
+    if (!dur) return;
+    ctrlProgress.max   = dur;
+    ctrlProgress.value = cur;
+    ctrlTimeCur.textContent = formatTime(cur);
+    ctrlTimeDur.textContent = formatTime(dur);
+    const pct = (cur / dur) * 100;
+    ctrlProgress.style.background =
+      `linear-gradient(to right, var(--brand-c) ${pct}%, var(--border2) ${pct}%)`;
+    const state = ytPlayer.getPlayerState();
+    ctrlPlay.textContent = state === YT.PlayerState.PLAYING ? '⏸' : '▶';
+  }, 500);
+}
+
+// ── MP4 room embed ────────────────────────────────────────────────
+function buildMP4(url, container, { autoplay, isRoom }) {
+  const video = document.createElement('video');
+  video.src      = url;
+  video.controls = !isRoom;          // native controls only outside a room
+  video.autoplay = autoplay;
+  video.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
+  container.appendChild(video);
+  videoEl = video;
+
+  if (isRoom) {
+    if (isHost) {
+      roomControls.classList.remove('hidden');
+      setupMP4Events(video);
+    } else {
+      roomControls.classList.add('hidden');
+      setTimeout(() => socket.emit('request-sync', { roomId: myRoomId }), 800);
     }
   }
 }
 
-// ─── Custom controls for mp4 ─────────────────────────────────────
-function setupVideoEvents(video) {
+function setupMP4Events(video) {
   video.addEventListener('timeupdate', () => {
     if (isNaN(video.duration)) return;
     ctrlProgress.max   = video.duration;
     ctrlProgress.value = video.currentTime;
     ctrlTimeCur.textContent = formatTime(video.currentTime);
     ctrlTimeDur.textContent = formatTime(video.duration);
-    // Fill track progress
     const pct = (video.currentTime / video.duration) * 100;
-    ctrlProgress.style.background = `linear-gradient(to right, var(--brand-c) ${pct}%, var(--border2) ${pct}%)`;
+    ctrlProgress.style.background =
+      `linear-gradient(to right, var(--brand-c) ${pct}%, var(--border2) ${pct}%)`;
   });
   video.addEventListener('play',  () => { ctrlPlay.textContent = '⏸'; });
   video.addEventListener('pause', () => { ctrlPlay.textContent = '▶'; });
   video.addEventListener('volumechange', () => {
-    ctrlVolIcon.textContent = video.muted || video.volume === 0 ? '🔇' : video.volume < .5 ? '🔉' : '🔊';
+    ctrlVolIcon.textContent = video.muted || video.volume === 0 ? '🔇'
+                            : video.volume < 0.5 ? '🔉' : '🔊';
   });
   ctrlVolume.addEventListener('input', () => {
     video.volume = ctrlVolume.value;
-    if (parseFloat(ctrlVolume.value) === 0) video.muted = true;
-    else video.muted = false;
+    video.muted  = parseFloat(ctrlVolume.value) === 0;
   });
 }
 
+// ── Unified control helpers ───────────────────────────────────────
+function hostCurrentTime() {
+  if (videoType === 'youtube' && ytPlayer?.getCurrentTime) return ytPlayer.getCurrentTime();
+  if (videoEl) return videoEl.currentTime;
+  return 0;
+}
+
+function guestSeekTo(t) {
+  if (videoType === 'youtube' && ytPlayer?.seekTo) ytPlayer.seekTo(t, true);
+  else if (videoEl) videoEl.currentTime = t;
+}
+
+function guestPlay(t) {
+  guestSeekTo(t);
+  if (videoType === 'youtube' && ytPlayer?.playVideo) ytPlayer.playVideo();
+  else if (videoEl) videoEl.play().catch(() => {});
+}
+
+function guestPause(t) {
+  guestSeekTo(t);
+  if (videoType === 'youtube' && ytPlayer?.pauseVideo) ytPlayer.pauseVideo();
+  else if (videoEl) videoEl.pause();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   CUSTOM CONTROLS (host only)
+// ═══════════════════════════════════════════════════════════════
+
 ctrlPlay.addEventListener('click', () => {
-  if (!videoEl || !isHost) return;
-  if (videoEl.paused) {
-    videoEl.play();
-    socket.emit('video-play', { roomId: myRoomId, currentTime: videoEl.currentTime });
-  } else {
-    videoEl.pause();
-    socket.emit('video-pause', { roomId: myRoomId, currentTime: videoEl.currentTime });
+  if (!isHost) return;
+  if (videoType === 'youtube' && ytPlayer) {
+    const state = ytPlayer.getPlayerState();
+    if (state === YT.PlayerState.PLAYING) {
+      ytPlayer.pauseVideo();
+      // onStateChange will emit video-pause
+    } else {
+      ytPlayer.playVideo();
+      // onStateChange will emit video-play
+    }
+  } else if (videoEl) {
+    if (videoEl.paused) {
+      videoEl.play();
+      socket.emit('video-play', { roomId: myRoomId, currentTime: videoEl.currentTime });
+    } else {
+      videoEl.pause();
+      socket.emit('video-pause', { roomId: myRoomId, currentTime: videoEl.currentTime });
+    }
   }
 });
 
 let seekTimeout;
 ctrlProgress.addEventListener('input', () => {
-  if (!videoEl || !isHost) return;
+  if (!isHost) return;
   ctrlTimeCur.textContent = formatTime(ctrlProgress.value);
   clearTimeout(seekTimeout);
   seekTimeout = setTimeout(() => {
-    videoEl.currentTime = parseFloat(ctrlProgress.value);
-    socket.emit('video-seek', { roomId: myRoomId, currentTime: videoEl.currentTime });
+    const t = parseFloat(ctrlProgress.value);
+    if (videoType === 'youtube' && ytPlayer) {
+      ytPlayer.seekTo(t, true);
+      socket.emit('video-seek', { roomId: myRoomId, currentTime: t });
+    } else if (videoEl) {
+      videoEl.currentTime = t;
+      socket.emit('video-seek', { roomId: myRoomId, currentTime: t });
+    }
   }, 250);
 });
 
-// Volume icon mute toggle
 ctrlVolIcon.addEventListener('click', () => {
   if (!videoEl) return;
-  videoEl.muted = !videoEl.muted;
+  videoEl.muted    = !videoEl.muted;
   ctrlVolume.value = videoEl.muted ? 0 : videoEl.volume;
   ctrlVolIcon.textContent = videoEl.muted ? '🔇' : '🔊';
 });
@@ -333,10 +470,8 @@ btnSoloClose.addEventListener('click', () => {
   soloPlayerWrap.classList.add('hidden');
   soloPlayer.innerHTML = '';
   homeVideoUrl.value = '';
-  videoEl = null;
 });
 
-// ─── Logos → home ──────────────────────────────────────────────────
 document.getElementById('logo-home').addEventListener('click', () => {
   if (myRoomId && !confirm('Выйти из комнаты?')) return;
   if (myRoomId) leaveRoom();
@@ -369,10 +504,8 @@ btnCreateConfirm.addEventListener('click', () => {
   const name = createName.value.trim();
   if (!name) { showModalError(createError, 'Введи своё имя'); return; }
   const url = createVideoUrl.value.trim();
-
   btnCreateConfirm.disabled = true;
   btnCreateConfirm.textContent = 'Создаём...';
-
   socket.emit('create-room', { name, videoUrl: url }, (res) => {
     btnCreateConfirm.disabled = false;
     btnCreateConfirm.innerHTML = '<span>✨</span> Создать';
@@ -392,9 +525,9 @@ createVideoUrl.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnCr
 function openJoinModal(code = '') {
   joinError.classList.add('hidden');
   joinName.value = '';
-  joinCode.value = code.toUpperCase();
+  joinCode.value  = code.toUpperCase();
   openModal(modalJoin);
-  (code ? joinName : joinName).focus();
+  joinName.focus();
 }
 
 btnOpenJoin.addEventListener('click', () => openJoinModal());
@@ -409,12 +542,10 @@ joinCode.addEventListener('input', () => {
 btnJoinConfirm.addEventListener('click', () => {
   const name   = joinName.value.trim();
   const roomId = joinCode.value.trim().toUpperCase();
-  if (!name)                { showModalError(joinError, 'Введи своё имя');    return; }
+  if (!name)   { showModalError(joinError, 'Введи своё имя');    return; }
   if (!roomId || roomId.length < 4) { showModalError(joinError, 'Введи код комнаты'); return; }
-
   btnJoinConfirm.disabled = true;
   btnJoinConfirm.textContent = 'Входим...';
-
   socket.emit('join-room', { roomId, name }, (res) => {
     btnJoinConfirm.disabled = false;
     btnJoinConfirm.innerHTML = '<span>🚀</span> Войти';
@@ -441,32 +572,23 @@ function enterRoom(roomInfo, name) {
   myRoomId = roomInfo.roomId;
   isHost   = roomInfo.hostId === socket.id;
   unreadChat = 0;
-  chatOpen   = true;
 
   displayRoomCode.textContent = roomInfo.roomId;
   showPage('room');
 
-  // Host vs guest UI
   if (isHost) {
     roomUrlBar.classList.remove('hidden');
     guestNote.classList.add('hidden');
-    roomControls.classList.add('hidden');
   } else {
     roomUrlBar.classList.add('hidden');
     guestNote.classList.remove('hidden');
-    roomControls.classList.add('hidden');
   }
 
-  // Members
   renderMembers(roomInfo.members, roomInfo.hostId);
   updateViewerCount(roomInfo.members.length);
 
-  // Load video
   if (roomInfo.videoUrl) {
     buildEmbed(roomInfo.videoUrl, roomPlayer, { autoplay: false, isRoom: true });
-    if (!isHost) {
-      setTimeout(() => socket.emit('request-sync', { roomId: myRoomId }), 1000);
-    }
   } else {
     roomPlayer.innerHTML = `
       <div class="player-placeholder">
@@ -475,26 +597,23 @@ function enterRoom(roomInfo, name) {
       </div>`;
   }
 
-  // Welcome chat message
   appendSystemMsg(`🎉 Добро пожаловать в комнату ${roomInfo.roomId}!`);
-  if (isHost) appendSystemMsg('🏠 Ты хост — вставь ссылку и нажми «Загрузить»');
+  if (isHost) appendSystemMsg('🏠 Ты хост — вставь ссылку, нажми «Загрузить» и управляй просмотром');
+  else        appendSystemMsg('👁 Ты зритель — хост управляет воспроизведением');
 
   showToast(isHost
-    ? '🏠 Ты хост! Скопируй ссылку и поделись с друзьями.'
+    ? '🏠 Ты хост — скопируй инвайт-ссылку и поделись!'
     : `✅ Ты в комнате ${roomInfo.roomId}`
   );
 }
 
 function leaveRoom() {
+  destroyCurrentPlayer();
   socket.disconnect();
-  myRoomId = null;
-  isHost   = false;
-  myName   = '';
-  videoEl  = null;
+  myRoomId = null; isHost = false; myName = '';
   roomPlayer.innerHTML   = '';
   chatMessages.innerHTML = '';
   membersList.innerHTML  = '';
-  roomControls.classList.add('hidden');
   unreadChat = 0;
   chatBadge.classList.add('hidden');
   socket.connect();
@@ -507,20 +626,17 @@ btnLeave.addEventListener('click', () => {
   showToast('👋 Ты вышел из комнаты');
 });
 
-// ─── Copy room code ───────────────────────────────────────────────
 btnCopyCode.addEventListener('click', () => {
   navigator.clipboard.writeText(myRoomId || '')
     .then(() => showToast('📋 Код скопирован!'));
 });
 
-// ─── Copy invite link ─────────────────────────────────────────────
 btnCopyInvite.addEventListener('click', () => {
   const url = `${location.origin}${location.pathname}?room=${myRoomId}`;
   navigator.clipboard.writeText(url)
     .then(() => showToast('🔗 Ссылка-приглашение скопирована!'));
 });
 
-// ─── Host sets new video ──────────────────────────────────────────
 btnRoomSetVideo.addEventListener('click', () => {
   const url = roomVideoUrl.value.trim();
   if (!url) return showToast('⚠️ Вставь ссылку на видео');
@@ -529,13 +645,10 @@ btnRoomSetVideo.addEventListener('click', () => {
 });
 roomVideoUrl.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnRoomSetVideo.click(); });
 
-// ─── Viewer count ─────────────────────────────────────────────────
-function updateViewerCount(n) {
-  viewerNum.textContent = n;
-}
+function updateViewerCount(n) { viewerNum.textContent = n; }
 
 // ═══════════════════════════════════════════════════════════════
-//   MEMBERS RENDERING
+//   MEMBERS
 // ═══════════════════════════════════════════════════════════════
 
 function renderMembers(members, hostId) {
@@ -587,23 +700,16 @@ function sendChat() {
 btnChatSend.addEventListener('click', sendChat);
 chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
 
-// ─── Sidebar tabs ──────────────────────────────────────────────────
 document.querySelectorAll('.sidebar-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.sidebar-tab').forEach(t   => t.classList.remove('active'));
     document.querySelectorAll('.sidebar-panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
-    const panel = document.getElementById(`tab-${tab.dataset.tab}`);
-    if (panel) panel.classList.add('active');
-
+    document.getElementById(`tab-${tab.dataset.tab}`)?.classList.add('active');
     if (tab.dataset.tab === 'chat') {
-      chatOpen = true;
       unreadChat = 0;
       chatBadge.classList.add('hidden');
-      chatBadge.textContent = '0';
       chatMessages.scrollTop = chatMessages.scrollHeight;
-    } else {
-      chatOpen = false;
     }
   });
 });
@@ -612,52 +718,47 @@ document.querySelectorAll('.sidebar-tab').forEach(tab => {
 //   SOCKET EVENTS
 // ═══════════════════════════════════════════════════════════════
 
-// ─── Video changed ───────────────────────────────────────────────
 socket.on('video-changed', ({ videoUrl }) => {
   buildEmbed(videoUrl, roomPlayer, { autoplay: false, isRoom: true });
-  if (!isHost) {
-    setTimeout(() => socket.emit('request-sync', { roomId: myRoomId }), 800);
-  }
   appendSystemMsg('🎬 Видео обновлено');
 });
 
-// ─── Playback (guests) ───────────────────────────────────────────
+// ── Playback (guests receive, host ignores) ────────────────────
 socket.on('video-played', ({ currentTime }) => {
-  if (isHost || !videoEl) return;
-  videoEl.currentTime = currentTime;
-  videoEl.play().catch(() => {});
+  if (isHost) return;
+  guestPlay(currentTime);
 });
 
 socket.on('video-paused', ({ currentTime }) => {
-  if (isHost || !videoEl) return;
-  videoEl.currentTime = currentTime;
-  videoEl.pause();
+  if (isHost) return;
+  guestPause(currentTime);
 });
 
 socket.on('video-seeked', ({ currentTime }) => {
-  if (isHost || !videoEl) return;
-  videoEl.currentTime = currentTime;
+  if (isHost) return;
+  guestSeekTo(currentTime);
 });
 
-// ─── Sync ──────────────────────────────────────────────────────────
+// ── Sync handshake ─────────────────────────────────────────────
 socket.on('sync-request', ({ guestId }) => {
-  if (!isHost || !videoEl) return;
-  socket.emit('sync-response', {
-    roomId: myRoomId,
-    guestId,
-    currentTime: videoEl.currentTime,
-    playing: !videoEl.paused
-  });
+  if (!isHost) return;
+  let currentTime = 0, playing = false;
+  if (videoType === 'youtube' && ytPlayer?.getCurrentTime) {
+    currentTime = ytPlayer.getCurrentTime();
+    playing     = ytPlayer.getPlayerState() === YT.PlayerState.PLAYING;
+  } else if (videoEl) {
+    currentTime = videoEl.currentTime;
+    playing     = !videoEl.paused;
+  }
+  socket.emit('sync-response', { roomId: myRoomId, guestId, currentTime, playing });
 });
 
 socket.on('sync-state', ({ currentTime, playing }) => {
-  if (!videoEl) return;
-  videoEl.currentTime = currentTime;
-  if (playing) videoEl.play().catch(() => {});
-  else videoEl.pause();
+  if (playing) guestPlay(currentTime);
+  else         guestPause(currentTime);
 });
 
-// ─── Members ──────────────────────────────────────────────────────
+// ── Members ────────────────────────────────────────────────────
 socket.on('user-joined', ({ name }) => {
   appendSystemMsg(`👋 ${name} присоединился(ась)`);
   showToast(`👋 ${name} в комнате`);
@@ -668,14 +769,15 @@ socket.on('user-left', ({ name }) => {
 });
 
 socket.on('host-changed', ({ newHostId }) => {
-  if (newHostId === socket.id) {
-    isHost = true;
-    roomUrlBar.classList.remove('hidden');
-    guestNote.classList.add('hidden');
-    if (videoEl) roomControls.classList.remove('hidden');
-    appendSystemMsg('👑 Ты стал(а) хостом');
-    showToast('👑 Ты новый хост!');
-  }
+  if (newHostId !== socket.id) return;
+  isHost = true;
+  roomUrlBar.classList.remove('hidden');
+  guestNote.classList.add('hidden');
+  // Show controls if player exists
+  if (ytPlayer || videoEl) roomControls.classList.remove('hidden');
+  if (videoType === 'youtube' && ytPlayer) startYTProgressTracker();
+  appendSystemMsg('👑 Ты стал(а) хостом');
+  showToast('👑 Ты новый хост!');
 });
 
 socket.on('room-update', (roomInfo) => {
@@ -683,34 +785,21 @@ socket.on('room-update', (roomInfo) => {
   updateViewerCount(roomInfo.members.length);
 });
 
-// ─── Chat ──────────────────────────────────────────────────────────
 socket.on('chat-message', (payload) => {
   appendChatMsg(payload);
-
-  // Badge if chat is not open
   const chatTab = document.querySelector('[data-tab="chat"]');
   if (!chatTab.classList.contains('active')) {
     unreadChat++;
     chatBadge.textContent = unreadChat > 9 ? '9+' : unreadChat;
     chatBadge.classList.remove('hidden');
-    // Flash the tab
     chatTab.style.color = 'var(--brand-a)';
     setTimeout(() => { chatTab.style.color = ''; }, 2000);
   }
 });
 
-// ─── Connection ────────────────────────────────────────────────────
-socket.on('disconnect', () => {
-  if (myRoomId) showToast('⚠️ Соединение потеряно — переподключение...');
-});
-socket.on('reconnect', () => {
-  if (myRoomId) showToast('✅ Переподключено');
-});
+socket.on('disconnect', () => { if (myRoomId) showToast('⚠️ Соединение потеряно...'); });
+socket.on('reconnect',  () => { if (myRoomId) showToast('✅ Переподключено'); });
 
-// Escape key to close modals
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    closeModal(modalCreate);
-    closeModal(modalJoin);
-  }
+  if (e.key === 'Escape') { closeModal(modalCreate); closeModal(modalJoin); }
 });
