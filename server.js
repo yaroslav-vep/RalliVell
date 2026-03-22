@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const os = require('os');
 
 const app = express();
 const server = http.createServer(app);
@@ -179,6 +180,28 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`🎬 RalliVell server running at http://localhost:${PORT}`);
+
+function getLocalIPs() {
+  const interfaces = os.networkInterfaces();
+  const ips = [];
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        ips.push(iface.address);
+      }
+    }
+  }
+  return ips;
+}
+
+server.listen(PORT, '0.0.0.0', () => {
+  const localIPs = getLocalIPs();
+  console.log('\n🎬 RalliVell server started!');
+  console.log(`   Локально:  http://localhost:${PORT}`);
+  if (localIPs.length > 0) {
+    localIPs.forEach(ip => {
+      console.log(`   В сети:    http://${ip}:${PORT}  ← открой на Android`);
+    });
+  }
+  console.log();
 });
