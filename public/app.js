@@ -212,9 +212,20 @@ function getYouTubeId(url) {
   return null;
 }
 
+// Extract VK owner ID and video ID from various vk.com/video URLs
+function getVKVideoInfo(url) {
+  try {
+    // Matches: video-12345_67890 or video12345_67890 (anywhere in URL/hash/path)
+    const match = url.match(/video(-?\d+)_(\d+)/);
+    if (match) return { oid: match[1], id: match[2] };
+  } catch {}
+  return null;
+}
+
 function detectVideoType(url) {
   if (!url) return null;
   if (getYouTubeId(url)) return 'youtube';
+  if (getVKVideoInfo(url)) return 'vk';
   if (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(url)) return 'mp4';
   return null;
 }
@@ -244,7 +255,7 @@ function buildEmbed(url, container, { autoplay = false, isRoom = false } = {}) {
     container.innerHTML = `
       <div class="player-placeholder">
         <div class="placeholder-anim">⚠️</div>
-        <p>Неподдерживаемая ссылка.<br>Поддерживаются YouTube и прямые MP4-файлы.</p>
+        <p>Неподдерживаемая ссылка.<br>Поддерживаются YouTube, VK и прямые MP4-файлы.</p>
       </div>`;
     return;
   }
@@ -253,15 +264,43 @@ function buildEmbed(url, container, { autoplay = false, isRoom = false } = {}) {
     if (isRoom) {
       buildYTRoom(getYouTubeId(url), container, autoplay);
     } else {
-      // Solo preview — simple iframe, no sync needed
       const iframe = document.createElement('iframe');
       iframe.src = `https://www.youtube.com/embed/${getYouTubeId(url)}?autoplay=${autoplay?1:0}&rel=0&modestbranding=1`;
       iframe.allow = 'autoplay; encrypted-media; fullscreen';
       iframe.allowFullscreen = true;
       container.appendChild(iframe);
     }
+  } else if (videoType === 'vk') {
+    buildVKEmbed(getVKVideoInfo(url), container, { autoplay, isRoom });
   } else {
     buildMP4(url, container, { autoplay, isRoom });
+  }
+}
+
+// ── VK embed ──────────────────────────────────────────────────────
+// VK has no public JS API, so we embed via iframe.
+// Host controls playback on their side; guests receive socket events.
+function buildVKEmbed(vkInfo, container, { autoplay, isRoom }) {
+  const iframe = document.createElement('iframe');
+  const params = new URLSearchParams({
+    oid:      vkInfo.oid,
+    id:       vkInfo.id,
+    autoplay: autoplay ? '1' : '0',
+    hd:       '2',
+  });
+  iframe.src = `https://vk.com/video_ext.php?${params}`;
+  iframe.style.cssText = 'width:100%;height:100%;border:none;display:block;';
+  iframe.allow = 'autoplay; encrypted-media; fullscreen';
+  iframe.allowFullscreen = true;
+  iframe.referrerPolicy = 'strict-origin';
+  container.appendChild(iframe);
+
+  // VK doesn't expose a JS API, so we can't hook play/pause events.
+  // Controls are always visible so guests can change quality/volume freely.
+  // Sync still works via socket: host emits events, guests reload iframe at correct position.
+  if (isRoom) {
+    if (isHost) roomControls.classList.remove('hidden');
+    else        setTimeout(() => socket.emit('request-sync', { roomId: myRoomId }), 800);
   }
 }
 
