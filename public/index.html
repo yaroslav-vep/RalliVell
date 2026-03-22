@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RalliVell — Watch Together</title>
+  <meta name="description" content="Смотри видео вместе с друзьями в реальном времени. Создай комнату и поделись ссылкой." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════ PARTICLES (background) ═══════════════════════ -->
+  <div class="particles" id="particles" aria-hidden="true"></div>
+
+  <!-- ═══════════════════════════ HOME PAGE ═══════════════════════════ -->
+  <div id="page-home" class="page active">
+
+    <!-- Nav -->
+    <header class="nav">
+      <div class="nav-logo" id="logo-home">
+        <div class="logo-orb">▶</div>
+        <span class="logo-text">RalliVell</span>
+      </div>
+      <div class="nav-actions">
+        <button id="btn-open-join" class="btn btn-ghost">
+          <span>🚪</span> Войти в комнату
+        </button>
+        <button id="btn-open-create" class="btn btn-primary">
+          <span>✨</span> Создать комнату
+        </button>
+      </div>
+    </header>
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-blob hero-blob-1" aria-hidden="true"></div>
+      <div class="hero-blob hero-blob-2" aria-hidden="true"></div>
+      <div class="hero-blob hero-blob-3" aria-hidden="true"></div>
+
+      <div class="hero-badge">🎬 Синхронный просмотр</div>
+      <h1 class="hero-title">
+        Смотри вместе<br/>
+        <span class="gradient-text">в реальном времени</span>
+      </h1>
+      <p class="hero-sub">
+        Вставь ссылку на YouTube или MP4 — создай комнату и<br/>
+        пригласи друзей одним кликом. Полная синхронизация.
+      </p>
+
+      <!-- CTA buttons -->
+      <div class="hero-ctas">
+        <button id="btn-hero-create" class="btn btn-primary btn-lg">
+          <span>🏠</span> Создать комнату
+        </button>
+        <button id="btn-hero-join" class="btn btn-ghost btn-lg">
+          <span>🔑</span> Войти по коду
+        </button>
+      </div>
+
+      <!-- Quick preview bar -->
+      <div class="preview-bar">
+        <div class="preview-bar-icon">🔗</div>
+        <input id="home-video-url" type="text" placeholder="Вставь ссылку на YouTube или MP4..." autocomplete="off" />
+        <button id="btn-watch-now" class="btn btn-primary btn-sm">Смотреть</button>
+      </div>
+    </section>
+
+    <!-- Solo player (preview) -->
+    <div id="solo-player-wrap" class="solo-player-wrap hidden">
+      <div class="solo-player-header">
+        <span id="solo-video-title" class="solo-video-title"></span>
+        <button id="btn-solo-close" class="btn btn-ghost btn-sm">✕ Закрыть</button>
+      </div>
+      <div id="solo-player" class="player-box"></div>
+    </div>
+
+    <!-- Features -->
+    <section class="features" id="feature-cards">
+      <div class="feature-card">
+        <div class="feature-icon-wrap">🎬</div>
+        <h3>YouTube & MP4</h3>
+        <p>Любая ссылка — мы сами распознаем тип и встроим плеер без лишних действий.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap">🔗</div>
+        <h3>Инвайт-ссылка</h3>
+        <p>Поделись ссылкой — друг открывает и сразу попадает в комнату. Никаких кодов вручную.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap">⚡</div>
+        <h3>Идеальный синк</h3>
+        <p>Play, pause, перемотка — у всех участников одновременно. Как будто вы рядом.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap">💬</div>
+        <h3>Живой чат</h3>
+        <p>Общайся в реальном времени прямо во время просмотра. Эмоции в моменте.</p>
+      </div>
+    </section>
+
+    <footer class="home-footer">
+      <span>© 2026 RalliVell</span>
+      <span>Смотри вместе, чувствуй вместе 🤍</span>
+    </footer>
+
+  </div><!-- /page-home -->
+
+
+  <!-- ═══════════════════════════ ROOM PAGE ═══════════════════════════ -->
+  <div id="page-room" class="page">
+
+    <!-- Room nav -->
+    <header class="nav room-nav">
+      <div class="nav-logo" id="logo-room">
+        <div class="logo-orb">▶</div>
+        <span class="logo-text">RalliVell</span>
+      </div>
+
+      <div class="room-code-badge">
+        <span class="room-code-label">Код</span>
+        <span id="display-room-code" class="room-code-value">———</span>
+        <button id="btn-copy-code" class="icon-btn" title="Скопировать код">📋</button>
+        <button id="btn-copy-invite" class="icon-btn" title="Скопировать ссылку-приглашение">🔗</button>
+      </div>
+
+      <div class="nav-right">
+        <div class="viewer-count" id="viewer-count">
+          <span class="viewer-dot"></span>
+          <span id="viewer-num">1</span>
+        </div>
+        <button id="btn-leave-room" class="btn btn-danger btn-sm">Выйти</button>
+      </div>
+    </header>
+
+    <div class="room-layout">
+
+      <!-- ── Video Column ── -->
+      <div class="room-main">
+
+        <!-- URL bar (host only) -->
+        <div class="room-url-bar" id="room-url-bar">
+          <div class="url-bar-icon">🔗</div>
+          <input id="room-video-url" type="text" placeholder="Вставь ссылку на видео (YouTube или MP4)..." autocomplete="off" />
+          <button id="btn-room-set-video" class="btn btn-primary btn-sm">Загрузить</button>
+        </div>
+
+        <!-- Guest note -->
+        <div class="guest-note hidden" id="guest-note">
+          <span>👁</span> Только хост управляет видео
+        </div>
+
+        <!-- Player -->
+        <div id="room-player" class="player-box room-player-box">
+          <div class="player-placeholder">
+            <div class="placeholder-anim">🎬</div>
+            <p>Ожидание видео от хоста...</p>
+          </div>
+        </div>
+
+        <!-- Custom controls (mp4 only) -->
+        <div id="room-controls" class="room-controls hidden">
+          <button id="ctrl-play" class="ctrl-btn" title="Play/Pause">▶</button>
+          <div class="ctrl-progress-wrap">
+            <span id="ctrl-time-cur" class="ctrl-time">0:00</span>
+            <div class="progress-track">
+              <input id="ctrl-progress" type="range" min="0" max="100" value="0" step="0.1" class="ctrl-progress" />
+            </div>
+            <span id="ctrl-time-dur" class="ctrl-time">0:00</span>
+          </div>
+          <div class="ctrl-volume-wrap">
+            <span class="ctrl-vol-icon" id="ctrl-vol-icon">🔊</span>
+            <input id="ctrl-volume" type="range" min="0" max="1" value="1" step="0.05" class="ctrl-volume" title="Громкость" />
+          </div>
+        </div>
+
+      </div><!-- /room-main -->
+
+      <!-- ── Sidebar ── -->
+      <aside class="room-sidebar">
+
+        <!-- Tabs -->
+        <div class="sidebar-tabs">
+          <button class="sidebar-tab active" data-tab="members">
+            👥 <span>Участники</span>
+          </button>
+          <button class="sidebar-tab" data-tab="chat">
+            💬 <span>Чат</span>
+            <span class="chat-badge hidden" id="chat-badge">0</span>
+          </button>
+        </div>
+
+        <!-- Members tab -->
+        <div class="sidebar-panel active" id="tab-members">
+          <ul id="members-list" class="members-list"></ul>
+        </div>
+
+        <!-- Chat tab -->
+        <div class="sidebar-panel" id="tab-chat">
+          <div id="chat-messages" class="chat-messages"></div>
+          <div class="chat-input-row">
+            <input id="chat-input" type="text" placeholder="Напиши что-нибудь..." maxlength="300" />
+            <button id="btn-chat-send" class="send-btn" title="Отправить">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+      </aside>
+    </div>
+
+  </div><!-- /page-room -->
+
+
+  <!-- ═══════════════════════════ MODALS ════════════════════════════ -->
+
+  <!-- Create Room Modal -->
+  <div id="modal-create" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-icon">🏠</div>
+        <div>
+          <h2 class="modal-title">Создать комнату</h2>
+          <p class="modal-sub">Станешь хостом и получишь код для приглашений</p>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Твоё имя</label>
+        <input id="create-name" type="text" class="form-input" placeholder="Например: Alex" maxlength="20" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Ссылка на видео <span class="optional">— необязательно</span></label>
+        <input id="create-video-url" type="text" class="form-input" placeholder="https://youtube.com/watch?v=..." />
+      </div>
+
+      <div class="modal-actions">
+        <button id="btn-create-cancel" class="btn btn-ghost">Отмена</button>
+        <button id="btn-create-confirm" class="btn btn-primary">
+          <span>✨</span> Создать
+        </button>
+      </div>
+      <p id="create-error" class="modal-error hidden"></p>
+    </div>
+  </div>
+
+  <!-- Join Room Modal -->
+  <div id="modal-join" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-icon">🚪</div>
+        <div>
+          <h2 class="modal-title">Войти в комнату</h2>
+          <p class="modal-sub">Введи код или перейди по ссылке-приглашению</p>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Твоё имя</label>
+        <input id="join-name" type="text" class="form-input" placeholder="Например: Maria" maxlength="20" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Код комнаты</label>
+        <input id="join-code" type="text" class="form-input code-input" placeholder="ABCD12" maxlength="6" />
+      </div>
+
+      <div class="modal-actions">
+        <button id="btn-join-cancel" class="btn btn-ghost">Отмена</button>
+        <button id="btn-join-confirm" class="btn btn-primary">
+          <span>🚀</span> Войти
+        </button>
+      </div>
+      <p id="join-error" class="modal-error hidden"></p>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
