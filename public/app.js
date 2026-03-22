@@ -65,9 +65,12 @@ const btnJoinCancel  = document.getElementById('btn-join-cancel');
 const joinError      = document.getElementById('join-error');
 
 const displayRoomCode  = document.getElementById('display-room-code');
+const displayRoomCodeM = document.getElementById('display-room-code-m'); // Mobile
 const btnCopyCode      = document.getElementById('btn-copy-code');
 const btnCopyInvite    = document.getElementById('btn-copy-invite');
+const btnCopyInviteM   = document.getElementById('btn-copy-invite-m'); // Mobile
 const btnLeave         = document.getElementById('btn-leave-room');
+const btnLeaveM        = document.getElementById('btn-leave-room-m'); // Mobile
 const roomUrlBar       = document.getElementById('room-url-bar');
 const roomVideoUrl     = document.getElementById('room-video-url');
 const btnRoomSetVideo  = document.getElementById('btn-room-set-video');
@@ -278,8 +281,7 @@ function buildYTRoom(ytId, container, autoplay) {
         autoplay:       autoplay ? 1 : 0,
         rel:            0,
         modestbranding: 1,
-        // guests: hide controls so they can't manually interact
-        controls:       isHost ? 1 : 0,
+        controls:       1, // Включаем родные контролы всем, чтобы гости могли менять качество (шестерёнка)
         disablekb:      isHost ? 0 : 1,
         fs:             1,
       },
@@ -336,7 +338,7 @@ function startYTProgressTracker() {
 function buildMP4(url, container, { autoplay, isRoom }) {
   const video = document.createElement('video');
   video.src      = url;
-  video.controls = !isRoom;          // native controls only outside a room
+  video.controls = true; // Родные контролы включены у всех (для полноэкранного режима и звука)
   video.autoplay = autoplay;
   video.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
   container.appendChild(video);
@@ -574,6 +576,7 @@ function enterRoom(roomInfo, name) {
   unreadChat = 0;
 
   displayRoomCode.textContent = roomInfo.roomId;
+  if (displayRoomCodeM) displayRoomCodeM.textContent = roomInfo.roomId;
   showPage('room');
 
   if (isHost) {
@@ -619,23 +622,23 @@ function leaveRoom() {
   socket.connect();
 }
 
-btnLeave.addEventListener('click', () => {
+[btnLeave, btnLeaveM].forEach(btn => btn?.addEventListener('click', () => {
   if (!confirm('Выйти из комнаты?')) return;
   leaveRoom();
   showPage('home');
   showToast('👋 Ты вышел из комнаты');
-});
+}));
 
 btnCopyCode.addEventListener('click', () => {
   navigator.clipboard.writeText(myRoomId || '')
     .then(() => showToast('📋 Код скопирован!'));
 });
 
-btnCopyInvite.addEventListener('click', () => {
+[btnCopyInvite, btnCopyInviteM].forEach(btn => btn?.addEventListener('click', () => {
   const url = `${location.origin}${location.pathname}?room=${myRoomId}`;
   navigator.clipboard.writeText(url)
-    .then(() => showToast('🔗 Ссылка-приглашение скопирована!'));
-});
+    .then(() => showToast('🔗 Ссылка скопирована!'));
+}));
 
 btnRoomSetVideo.addEventListener('click', () => {
   const url = roomVideoUrl.value.trim();

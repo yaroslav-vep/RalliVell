@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
   <title>RalliVell — Watch Together</title>
   <meta name="description" content="Смотри видео вместе с друзьями в реальном времени. Создай комнату и поделись ссылкой." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -134,6 +134,18 @@
         <button id="btn-leave-room" class="btn btn-danger btn-sm">Выйти</button>
       </div>
     </header>
+
+    <!-- Mobile-only compact bar (replaces sticky nav on small screens) -->
+    <div class="room-mobile-bar">
+      <div class="room-mobile-code">
+        <span class="room-code-label">Код</span>
+        <span id="display-room-code-m" class="room-code-value"></span>
+      </div>
+      <div class="room-mobile-actions">
+        <button id="btn-copy-invite-m" class="icon-btn" title="Скопировать ссылку">🔗</button>
+        <button id="btn-leave-room-m" class="btn btn-danger btn-sm">Выйти</button>
+      </div>
+    </div>
 
     <div class="room-layout">
 

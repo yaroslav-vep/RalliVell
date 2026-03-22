@@ -72,8 +72,14 @@ body {
 }
 
 /* ─── Pages ─────────────────────────────────────────────────── */
-.page { display: none; flex-direction: column; min-height: 100vh; position: relative; z-index: 1; }
+.page { display: none; flex-direction: column; min-height: 100dvh; position: relative; z-index: 1; }
 .page.active { display: flex; }
+/* Room page: fixed height — never scrolls, keyboard shrinks it */
+#page-room {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
 .hidden { display: none !important; }
 
 /* ─── Navigation ──────────────────────────────────────────── */
@@ -501,10 +507,12 @@ body {
 .room-layout {
   display: grid;
   grid-template-columns: 1fr 310px;
+  grid-template-rows: minmax(0, 1fr); /* Restricts row height to container exactly */
   gap: 1rem;
   padding: 1rem;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .room-main {
@@ -556,8 +564,9 @@ body {
 
 .room-player-box {
   flex: 1;
-  min-height: 300px;
+  min-height: 0; /* Prevents stretching past viewport */
   border-radius: var(--radius);
+  position: relative;
 }
 
 /* ─── Custom Controls ─────────────────────────────────────────── */
@@ -686,11 +695,20 @@ input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.3); }
   100% { transform: scale(1); }
 }
 
-.sidebar-panel { display: none; flex: 1; overflow-y: auto; flex-direction: column; min-height: 0; }
+.sidebar-panel { display: none; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
 .sidebar-panel.active { display: flex; }
 
 /* Members */
-.members-list { list-style: none; padding: .65rem; display: flex; flex-direction: column; gap: .45rem; }
+.members-list {
+  list-style: none;
+  padding: .65rem;
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
 .members-list li {
   display: flex;
   align-items: center;
@@ -780,6 +798,10 @@ input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.3); }
   padding: .6rem;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  z-index: 99;
+  background: var(--bg);
 }
 .chat-input-row input {
   flex: 1;
@@ -936,17 +958,87 @@ input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.3); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ─── Responsive ──────────────────────────────────────────────── */
+/* ─── Room Mobile Bar (visible only on mobile) ───────────────────── */
+.room-mobile-bar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: .3rem .75rem;
+  background: rgba(8,8,16,.9);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  gap: .5rem;
+}
+.room-mobile-code {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+.room-mobile-actions {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+/* ─── Responsive ─────────────────────────────────────────────────── */
 @media (max-width: 800px) {
+
+  /* ── Home ── */
   .nav { padding: 0 1rem; height: 60px; }
   .nav-actions .btn:first-child { display: none; }
-  .room-layout { grid-template-columns: 1fr; grid-template-rows: auto 340px; }
-  .room-sidebar { height: 340px; }
   .hero { padding: 5rem 1.25rem 2.5rem; }
   .hero-ctas .btn-lg { padding: .65rem 1.35rem; font-size: .95rem; }
   .features { grid-template-columns: 1fr 1fr; padding: 0 1.25rem 3rem; }
-  .room-code-label { display: none; }
+
+  /* ── Room: hide sticky nav, show compact bar ── */
+  #page-room .nav { display: none; }
+  .room-mobile-bar { display: flex; }
+
+  .room-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    padding: .4rem;
+    gap: .4rem;
+    overflow: hidden;
+  }
+
+  /* Video: dvh-based height, always visible even with keyboard open */
+  .room-player-box {
+    aspect-ratio: unset !important;
+    height: clamp(155px, 36dvh, 250px);
+    min-height: 0;
+    flex: none;
+  }
+
+  .room-sidebar {
+    height: auto;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .sidebar-panel.active {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .chat-messages {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .chat-input-row { flex-shrink: 0; }
+
+  .room-url-bar { padding: .3rem .3rem .3rem .6rem; }
+  .room-url-bar input { font-size: .85rem; }
+
+  .room-controls { padding: .45rem .65rem; gap: .55rem; }
+  .ctrl-btn { width: 32px; height: 32px; font-size: .8rem; }
 }
+
 @media (max-width: 520px) {
   .features { grid-template-columns: 1fr; }
   .modal { padding: 1.5rem; }
